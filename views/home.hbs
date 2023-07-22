@@ -1,0 +1,153 @@
+<div>
+  <form id="form">
+    <div>
+      <label for="repetitions">Repetitions</label>
+      <input id="repetitions" placeholder="Enter repetitions..." type="number">
+    </div>
+    <div>
+      <label for="interval">Interval</label>
+      <input id="interval" placeholder="Enter interval..." type="number">
+    </div>
+    <button id="start" type="button">Start</button>
+    <button id="continue" type="button">Continue</button>
+    <button id="pause" type="button">Pause</button>
+    <button id="stop" type="button">Stop</button>
+  </form>
+  <div>Round:&nbsp;<span id="round"></span></div>
+  <div>Total Repetitions:&nbsp;<span id="total_repetitions"></span></div>
+  <div>Time:&nbsp;<span id="time"></span></div>
+</div>
+
+<script>
+  const formEl = document.getElementById('form')
+  const repetitionsInputEl = document.getElementById('repetitions')
+  const intervalInputEl = document.getElementById('interval')
+  const startButtonEl = document.getElementById('start')
+  const continueButtonEl = document.getElementById('continue')
+  const pauseButtonEl = document.getElementById('pause')
+  const stopButtonEl = document.getElementById('stop')
+  const roundTextEl = document.getElementById('round')
+  const totalRepetitionsEl = document.getElementById('total_repetitions')
+  const timeTextEl = document.getElementById('time')
+  const beepAudio = new Audio('/beep.mp3')
+
+  function calcCurrentTime (previousTime, start) {
+    if (start === 0) return 0
+    return previousTime + ((Date.now() - start) / 1000)
+  }
+
+  function tryJSONParse (text) {
+    try {
+      return JSON.parse(text)
+    } catch (err) {
+      return null
+    }
+  }
+
+  let state = tryJSONParse(window.localStorage.getItem('exercise-app')) || {
+    interval: '',
+    paused: false,
+    repetitions: '',
+    running: false,
+    round: 0,
+    roundAudioPlayed: false,
+    roundInterval: 0,
+    roundRepetitions: 0,
+    previousTime: 0,
+    start: 0
+  }
+
+  function render () {
+    const currentTime = !state.running ? state.previousTime : calcCurrentTime(state.previousTime, state.start)
+    const currentRound = state.roundInterval === 0 ? 0 : Math.floor(currentTime / state.roundInterval)
+    const roundTime = Math.floor(currentTime % state.roundInterval)
+    const roundTimeLeft = state.roundInterval - roundTime
+
+    repetitionsInputEl.disabled = state.running || state.paused
+    intervalInputEl.disabled = state.running || state.paused
+
+    roundTextEl.innerHTML = currentRound.toString()
+    totalRepetitionsEl.innerHTML = (state.roundRepetitions * state.round).toString()
+    timeTextEl.innerHTML = currentTime.toFixed(2)
+
+    startButtonEl.disabled = state.repetitions === '' || state.interval === ''
+    startButtonEl.style.display = state.running || state.paused ? 'none' : ''
+    continueButtonEl.style.display = state.paused ? '' : 'none'
+    pauseButtonEl.style.display = state.running ? '' : 'none'
+    stopButtonEl.style.display = state.running || state.paused ? '' : 'none'
+
+    if (roundTimeLeft === 3 && !state.roundAudioPlayed) {
+      beepAudio.play()
+      saveState({ roundAudioPlayed: true })
+    }
+
+    if (state.round !== currentRound) {
+      saveState({
+        round: currentRound,
+        roundAudioPlayed: false
+      })
+    }
+
+    if (state.running) {
+      window.requestAnimationFrame(render)
+    }
+  }
+
+  function saveState (partialState) {
+    state = Object.assign(state, partialState)
+    window.localStorage.setItem('exercise-app', JSON.stringify(state))
+    render()
+  }
+
+  formEl.addEventListener('submit', (e) => {
+    e.preventDefault()
+  })
+
+  repetitionsInputEl.addEventListener('change', (e) => {
+    saveState({ repetitions: e.target.value })
+  })
+
+  intervalInputEl.addEventListener('change', (e) => {
+    saveState({ interval: e.target.value })
+  })
+
+  continueButtonEl.addEventListener('click', () => {
+    saveState({
+      paused: false,
+      running: true,
+      start: Date.now()
+    })
+  })
+
+  startButtonEl.addEventListener('click', () => {
+    saveState({
+      previousTime: 0,
+      running: true,
+      round: 0,
+      roundAudioPlayed: false,
+      roundInterval: parseInt(state.interval),
+      roundRepetitions: parseInt(state.repetitions),
+      start: Date.now()
+    })
+  })
+
+  pauseButtonEl.addEventListener('click', () => {
+    saveState({
+      paused: true,
+      previousTime: calcCurrentTime(state.previousTime, state.start),
+      running: false
+    })
+  })
+
+  stopButtonEl.addEventListener('click', () => {
+    saveState({
+      paused: false,
+      previousTime: calcCurrentTime(state.previousTime, state.start),
+      running: false
+    })
+  })
+
+  repetitionsInputEl.value = state.repetitions
+  intervalInputEl.value = state.interval
+  render()
+</script>
